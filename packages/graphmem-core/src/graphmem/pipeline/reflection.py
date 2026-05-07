@@ -41,7 +41,7 @@ class ReflectionGenerator:
             "required": ["reflections"],
         }
         try:
-            result = self.llm_client.complete_structured(prompt, schema=schema, max_tokens=1024)
+            result = self.llm_client.complete_structured(prompt, schema=schema, max_tokens=2048)
         except Exception:
             return []
 

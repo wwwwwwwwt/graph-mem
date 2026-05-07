@@ -45,7 +45,16 @@ class OpenAILLMClient(LLMClient):
             messages=[{"role": "user", "content": full_prompt}],
             max_tokens=max_tokens,
         )
-        text = (response.choices[0].message.content or "").strip()
+        msg = response.choices[0].message
+        text = (msg.content or "").strip()
+        # DeepSeek reasoning models may emit reasoning_content that consumes
+        # the max_tokens budget, leaving content empty.
+        if not text and hasattr(msg, "reasoning_content") and msg.reasoning_content:
+            raise RuntimeError(
+                "LLM returned empty content (reasoning_content present). "
+                "This usually means max_tokens was too small for a reasoning model. "
+                "Try increasing max_tokens (e.g. 2048 or higher)."
+            )
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         return json.loads(text)

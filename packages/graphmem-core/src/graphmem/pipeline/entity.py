@@ -38,7 +38,7 @@ class EntityExtractor:
             "required": ["entities"],
         }
         try:
-            result = self.llm_client.complete_structured(prompt, schema=schema, max_tokens=512)
+            result = self.llm_client.complete_structured(prompt, schema=schema, max_tokens=2048)
         except Exception:
             return []
 
