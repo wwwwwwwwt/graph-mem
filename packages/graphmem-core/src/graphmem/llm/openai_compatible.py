@@ -19,15 +19,18 @@ class OpenAILLMClient(LLMClient):
         api_key: str,
         base_url: str | None = None,
         default_model: str = "gpt-4o-mini",
+        extra_params: dict | None = None,
     ):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.default_model = default_model
+        self.extra_params = extra_params or {}
 
     def complete(self, prompt: str, *, max_tokens: int = 512) -> str:
         response = self.client.chat.completions.create(
             model=self.default_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
+            **self.extra_params,
         )
         return response.choices[0].message.content or ""
 
@@ -44,6 +47,7 @@ class OpenAILLMClient(LLMClient):
             model=self.default_model,
             messages=[{"role": "user", "content": full_prompt}],
             max_tokens=max_tokens,
+            **self.extra_params,
         )
         msg = response.choices[0].message
         text = (msg.content or "").strip()
@@ -53,7 +57,8 @@ class OpenAILLMClient(LLMClient):
             raise RuntimeError(
                 "LLM returned empty content (reasoning_content present). "
                 "This usually means max_tokens was too small for a reasoning model. "
-                "Try increasing max_tokens (e.g. 2048 or higher)."
+                "Try increasing max_tokens (e.g. 2048 or higher), or disable "
+                "reasoning via extra_params (e.g. enable_thinking: false)."
             )
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()

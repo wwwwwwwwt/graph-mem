@@ -13,6 +13,7 @@ class LLMConfig(BaseModel):
     base_url: str | None = None
     default_model: str = ""
     models: dict[str, str] = Field(default_factory=dict)
+    extra_params: dict = Field(default_factory=dict)  # vendor-specific params
 
 
 class EmbedConfig(BaseModel):

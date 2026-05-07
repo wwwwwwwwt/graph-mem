@@ -102,6 +102,7 @@ class Memory:
                 api_key=llm_cfg.api_key,
                 base_url=llm_cfg.base_url,
                 default_model=llm_cfg.default_model or llm_cfg.models.get("episode", "gpt-4o-mini"),
+                extra_params=getattr(llm_cfg, "extra_params", None) or {},
             )
         else:
             llm_client = NoOpLLMClient()
