@@ -114,6 +114,12 @@ class Memory:
             embed_client = VoyageEmbedClient(
                 api_key=embed_cfg.api_key, model=embed_cfg.model
             )
+        elif embed_cfg.driver == "bge":
+            from graphmem.embed.bge_client import BGEEmbedClient
+            embed_client = BGEEmbedClient(
+                model_name=embed_cfg.model,
+                dim=embed_cfg.dim,
+            )
         else:
             embed_client = SentenceTransformerEmbedClient(model_name=embed_cfg.model)
 
