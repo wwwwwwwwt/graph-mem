@@ -30,7 +30,7 @@ class OpenAILLMClient(LLMClient):
             model=self.default_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
-            **self.extra_params,
+            extra_body=self.extra_params,
         )
         return response.choices[0].message.content or ""
 
@@ -47,7 +47,7 @@ class OpenAILLMClient(LLMClient):
             model=self.default_model,
             messages=[{"role": "user", "content": full_prompt}],
             max_tokens=max_tokens,
-            **self.extra_params,
+            extra_body=self.extra_params,
         )
         msg = response.choices[0].message
         text = (msg.content or "").strip()
