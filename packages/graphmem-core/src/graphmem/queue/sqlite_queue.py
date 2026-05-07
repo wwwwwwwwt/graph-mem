@@ -78,5 +78,44 @@ class SQLiteTaskQueue(TaskQueue):
             )
             conn.commit()
 
+    def dequeue_by_session(self, *, batch_size: int = 20) -> dict[str, list[dict]]:
+        """Group pending tasks by session_id for batch compression."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, task_type, payload FROM tasks WHERE status = 'pending' "
+                "ORDER BY created_at LIMIT ?",
+                (batch_size,),
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                return {}
+
+            tasks = []
+            for row in rows:
+                task_id, task_type, payload = row
+                cursor.execute(
+                    "UPDATE tasks SET status = 'running', started_at = ? WHERE id = ?",
+                    (datetime.now(timezone.utc).isoformat(), task_id),
+                )
+                tasks.append({
+                    "id": str(task_id),
+                    "task_type": task_type,
+                    "payload": json.loads(payload),
+                })
+            conn.commit()
+
+        groups: dict[str, list[dict]] = {}
+        for t in tasks:
+            sid = t["payload"].get("session_id", "_no_session")
+            groups.setdefault(sid, []).append(t)
+        return groups
+
+    def count_pending(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM tasks WHERE status = 'pending'")
+            return cursor.fetchone()[0]
+
     def close(self) -> None:
         pass
