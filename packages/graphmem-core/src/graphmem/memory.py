@@ -164,7 +164,7 @@ class Memory:
         )
 
         if self.summarizer.should_compress(turn_count=turn_index + 1):
-            self._compress_session(session_id)
+            self.queue.enqueue("compress", {"session_id": session_id, "node_id": node_id})
 
         return node_id
 
