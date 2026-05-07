@@ -9,7 +9,9 @@ from ulid import ULID
 from graphmem.config import Config, load_config
 from graphmem.embed.sentence_transformer import SentenceTransformerEmbedClient
 from graphmem.llm.noop import NoOpLLMClient
-from graphmem.pipeline.episode import HeuristicEpisodeSummarizer
+from graphmem.pipeline.episode import HeuristicEpisodeSummarizer, LLMEpisodeSummarizer
+from graphmem.pipeline.entity import EntityExtractor
+from graphmem.pipeline.reflection import ReflectionGenerator
 from graphmem.queue.sqlite_queue import SQLiteTaskQueue
 from graphmem.retrieval.format import format_results
 from graphmem.retrieval.search import SearchEngine
@@ -18,6 +20,8 @@ from graphmem.schema import (
     EdgeType,
     L0Turn,
     L1Episode,
+    L2Entity,
+    L3Reflection,
     Layer,
     MemoryEdge,
     MemoryNode,
@@ -50,10 +54,17 @@ class Memory:
         self.embed_client = embed_client
         self.queue = queue
         self.search_engine = SearchEngine(vector_store, graph_store)
-        self.summarizer = HeuristicEpisodeSummarizer(
-            trigger_turns=config.compression.triggers.get("turns", 20),
-            trigger_idle_seconds=config.compression.triggers.get("idle_seconds", 300),
-        )
+        if isinstance(self.llm_client, NoOpLLMClient):
+            self.summarizer = HeuristicEpisodeSummarizer(
+                trigger_turns=config.compression.triggers.get("turns", 20),
+                trigger_idle_seconds=config.compression.triggers.get("idle_seconds", 300),
+            )
+        else:
+            self.summarizer = LLMEpisodeSummarizer(
+                llm_client=self.llm_client,
+                trigger_turns=config.compression.triggers.get("turns", 20),
+                trigger_idle_seconds=config.compression.triggers.get("idle_seconds", 300),
+            )
 
     @classmethod
     def open(
@@ -76,8 +87,28 @@ class Memory:
             str(db_dir / "vectors"),
             dim=cfg.embed.dim,
         )
-        llm_client = NoOpLLMClient()
-        embed_client = SentenceTransformerEmbedClient(model_name=cfg.embed.model)
+
+        # LLM backend selection
+        llm_cfg = cfg.llm
+        if llm_cfg.driver == "anthropic" and llm_cfg.api_key:
+            from graphmem.llm.anthropic_client import AnthropicLLMClient
+            llm_client = AnthropicLLMClient(
+                api_key=llm_cfg.api_key,
+                default_model=llm_cfg.models.get("episode", "claude-haiku-4"),
+            )
+        else:
+            llm_client = NoOpLLMClient()
+
+        # Embed backend selection
+        embed_cfg = cfg.embed
+        if embed_cfg.driver == "voyage" and getattr(embed_cfg, "api_key", None):
+            from graphmem.embed.voyage_client import VoyageEmbedClient
+            embed_client = VoyageEmbedClient(
+                api_key=embed_cfg.api_key, model=embed_cfg.model
+            )
+        else:
+            embed_client = SentenceTransformerEmbedClient(model_name=embed_cfg.model)
+
         queue = SQLiteTaskQueue(str(home_path / "queue.db"))
 
         return cls(
@@ -163,6 +194,51 @@ class Memory:
             layer=Layer.L1.value,
             vector=embeddings[0],
         )
+
+        # Stage 2: Entity extraction (Mode B only)
+        if not isinstance(self.llm_client, NoOpLLMClient):
+            extractor = EntityExtractor(self.llm_client)
+            entities = extractor.extract(episode)
+            for entity in entities:
+                entity.id = f"L2-{ULID()}"
+                self.graph_store.create_node(entity)
+                self.vector_store.insert(
+                    embedding_id=f"emb-{entity.id}",
+                    node_id=entity.id,
+                    scope=self.scope,
+                    layer=Layer.L2.value,
+                    vector=self.embed_client.embed([entity.description or entity.name])[0],
+                )
+                edge = MemoryEdge(
+                    id=f"edge-{episode.id}-{entity.id}",
+                    type=EdgeType.MENTIONS,
+                    from_id=episode.id,
+                    to_id=entity.id,
+                    scope=self.scope,
+                )
+                self.graph_store.create_edge(edge)
+
+        # Stage 3: Reflection (Mode B only, triggered by episode count)
+        if not isinstance(self.llm_client, NoOpLLMClient):
+            all_l1 = self.graph_store.query_nodes(scope=self.scope, layer="L1")
+            generator = ReflectionGenerator(
+                self.llm_client,
+                min_episodes=self.config.compression.triggers.get("min_episodes", 5),
+            )
+            if generator.should_generate(all_l1):
+                reflections = generator.generate(all_l1)
+                for reflection in reflections:
+                    reflection.id = f"L3-{ULID()}"
+                    self.graph_store.create_node(reflection)
+                    for eid in reflection.evidence_ids:
+                        edge = MemoryEdge(
+                            id=f"edge-{reflection.id}-{eid}",
+                            type=EdgeType.DERIVED_FROM,
+                            from_id=reflection.id,
+                            to_id=eid,
+                            scope=self.scope,
+                        )
+                        self.graph_store.create_edge(edge)
 
     def recall(
         self,
