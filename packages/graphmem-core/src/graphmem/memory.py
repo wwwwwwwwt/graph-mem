@@ -90,11 +90,18 @@ class Memory:
 
         # LLM backend selection
         llm_cfg = cfg.llm
-        if llm_cfg.driver == "anthropic" and llm_cfg.api_key:
+        if llm_cfg.driver in ("anthropic",) and llm_cfg.api_key:
             from graphmem.llm.anthropic_client import AnthropicLLMClient
             llm_client = AnthropicLLMClient(
                 api_key=llm_cfg.api_key,
-                default_model=llm_cfg.models.get("episode", "claude-haiku-4"),
+                default_model=llm_cfg.models.get("episode", llm_cfg.default_model or "claude-haiku-4"),
+            )
+        elif llm_cfg.driver in ("openai_compatible", "openai", "deepseek") and llm_cfg.api_key:
+            from graphmem.llm.openai_compatible import OpenAILLMClient
+            llm_client = OpenAILLMClient(
+                api_key=llm_cfg.api_key,
+                base_url=llm_cfg.base_url,
+                default_model=llm_cfg.default_model or llm_cfg.models.get("episode", "gpt-4o-mini"),
             )
         else:
             llm_client = NoOpLLMClient()

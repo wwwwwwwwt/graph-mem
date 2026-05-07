@@ -8,7 +8,10 @@ from pydantic import BaseModel, Field
 
 class LLMConfig(BaseModel):
     driver: str = "noop"
+    provider: str = ""  # anthropic | openai | deepseek | azure | ...
     api_key: str | None = None
+    base_url: str | None = None
+    default_model: str = ""
     models: dict[str, str] = Field(default_factory=dict)
 
 
