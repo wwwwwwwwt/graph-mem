@@ -41,7 +41,7 @@ def _node_to_dict(node: MemoryNode) -> dict[str, Any]:
         "tokens": node.tokens,
         "pinned": node.pinned,
         "ttl_at": _dt_to_str(node.ttl_at),
-        "meta": json.dumps(node.meta),
+        "meta": json.dumps(node.meta, ensure_ascii=False),
         "content": node.content,
     }
 
@@ -151,7 +151,7 @@ class KuzuGraphStore(GraphStore):
         if isinstance(node, L0Turn):
             pairs.extend([
                 f"role: {self._escape(node.role)}",
-                f"tool_calls: {self._escape(json.dumps(node.tool_calls or []))}",
+                f"tool_calls: {self._escape(json.dumps(node.tool_calls or [], ensure_ascii=False))}",
                 f"session_id: {self._escape(node.session_id)}",
                 f"turn_index: {self._escape(node.turn_index)}",
             ])
@@ -159,21 +159,21 @@ class KuzuGraphStore(GraphStore):
             pairs.extend([
                 f"title: {self._escape(node.title)}",
                 f"summary: {self._escape(node.summary)}",
-                f"key_points: {self._escape(json.dumps(node.key_points))}",
-                f"participants: {self._escape(json.dumps(node.participants))}",
+                f"key_points: {self._escape(json.dumps(node.key_points, ensure_ascii=False))}",
+                f"participants: {self._escape(json.dumps(node.participants, ensure_ascii=False))}",
             ])
         elif isinstance(node, L2Entity):
             pairs.extend([
                 f"name: {self._escape(node.name)}",
                 f"kind: {self._escape(node.kind)}",
-                f"aliases: {self._escape(json.dumps(node.aliases))}",
+                f"aliases: {self._escape(json.dumps(node.aliases, ensure_ascii=False))}",
                 f"description: {self._escape(node.description)}",
                 f"confidence: {self._escape(node.confidence)}",
             ])
         elif isinstance(node, L3Reflection):
             pairs.extend([
                 f"insight: {self._escape(node.insight)}",
-                f"evidence_ids: {self._escape(json.dumps(node.evidence_ids))}",
+                f"evidence_ids: {self._escape(json.dumps(node.evidence_ids, ensure_ascii=False))}",
                 f"confidence: {self._escape(node.confidence)}",
                 f"kind_ref: {self._escape(node.kind)}",
             ])

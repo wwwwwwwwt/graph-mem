@@ -1,6 +1,7 @@
 """Generic OpenAI-compatible LLM client (DeepSeek, OpenAI, Azure, etc.)."""
 
 import json
+import re
 from typing import Any
 
 try:
@@ -11,6 +12,22 @@ except ImportError as e:
     ) from e
 
 from graphmem.llm.base import LLMClient
+
+
+def _fix_bare_unicode_escapes(value: Any) -> Any:
+    """Some LLMs emit uXXXX without backslash; fix recursively."""
+    if isinstance(value, str):
+        def _repl(m):
+            try:
+                return chr(int(m.group(1), 16))
+            except ValueError:
+                return m.group(0)
+        return re.sub(r'(?<!\\)u([0-9a-fA-F]{4})', _repl, value)
+    if isinstance(value, list):
+        return [_fix_bare_unicode_escapes(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _fix_bare_unicode_escapes(v) for k, v in value.items()}
+    return value
 
 
 class OpenAILLMClient(LLMClient):
@@ -62,4 +79,5 @@ class OpenAILLMClient(LLMClient):
             )
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        return json.loads(text)
+        parsed = json.loads(text)
+        return _fix_bare_unicode_escapes(parsed)
