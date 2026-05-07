@@ -211,11 +211,17 @@ class KuzuGraphStore(GraphStore):
         edge_types: list[EdgeType] | None = None,
         direction: str = "out",
     ) -> list[tuple[MemoryEdge, MemoryNode]]:
-        rel_dir = "->" if direction == "out" else "<-"
-        cypher = (
-            f"MATCH (n:MemoryNode)-[e:MemoryEdge]{rel_dir}(m:MemoryNode) "
-            f"WHERE n.id = '{node_id}' RETURN e, m"
-        )
+        # Kuzu requires `->` direction in MATCH; swap node order for incoming edges
+        if direction == "out":
+            cypher = (
+                f"MATCH (n:MemoryNode)-[e:MemoryEdge]->(m:MemoryNode) "
+                f"WHERE n.id = '{node_id}' RETURN e, m"
+            )
+        else:
+            cypher = (
+                f"MATCH (m:MemoryNode)-[e:MemoryEdge]->(n:MemoryNode) "
+                f"WHERE n.id = '{node_id}' RETURN e, m"
+            )
         result = self.conn.execute(cypher)
         neighbors = []
         while result.has_next():
@@ -225,18 +231,22 @@ class KuzuGraphStore(GraphStore):
             edge_type = EdgeType(edge_data["type"])
             if edge_types and edge_type not in edge_types:
                 continue
+            if direction == "out":
+                from_id = node_id
+                to_id = node_data["id"]
+            else:
+                from_id = node_data["id"]
+                to_id = node_id
             edge = MemoryEdge(
                 id=f"{edge_data['_src']['offset']}-{edge_data['_dst']['offset']}",
                 type=edge_type,
-                from_id=node_data["id"] if direction == "in" else node_id,
-                to_id=node_id if direction == "in" else node_data["id"],
+                from_id=from_id,
+                to_id=to_id,
                 scope=edge_data["scope"],
                 weight=edge_data.get("weight", 1.0),
                 meta=json.loads(edge_data.get("meta", "{}")),
                 created_at=_str_to_dt(edge_data.get("created_at", "")),
             )
-            if direction == "in":
-                edge.from_id, edge.to_id = edge.to_id, edge.from_id
             neighbors.append((edge, _row_to_node(node_data)))
         return neighbors
 

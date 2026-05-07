@@ -40,8 +40,7 @@ def test_worker_skips_single_turn_session():
         "mode": "A",
         "compression": {"triggers": {"turns": 999, "min_episodes": 99}},
     })
-    nid1 = mem.write_turn("user", "only one", session_id="sid1")
-    mem.queue.enqueue("compress", {"session_id": "sid1", "node_id": nid1})
+    mem.write_turn("user", "only one", session_id="sid1")
 
     worker = CompressionWorker(mem)
     report = worker.run_once()

@@ -66,11 +66,13 @@ class CompressionWorker:
 
             # Build actual turn objects from stored node IDs
             turn_nodes = []
+            seen_ids = set()
             for t in tasks:
                 node_id = t["payload"].get("node_id")
-                if node_id:
+                if node_id and node_id not in seen_ids:
                     node = self.memory.graph_store.get_node(node_id)
                     if node is not None:
+                        seen_ids.add(node_id)
                         turn_nodes.append(node)
 
             if len(turn_nodes) < 2:

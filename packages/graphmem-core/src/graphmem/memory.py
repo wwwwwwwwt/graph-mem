@@ -163,8 +163,12 @@ class Memory:
             vector=embeddings[0],
         )
 
-        if self.summarizer.should_compress(turn_count=turn_index + 1):
-            self.queue.enqueue("compress", {"session_id": session_id, "node_id": node_id})
+        # Enqueue compression task for async batch processing
+        self.queue.enqueue("compress", {
+            "session_id": session_id,
+            "node_id": node_id,
+            "scope": self.scope,
+        })
 
         return node_id
 
@@ -176,6 +180,17 @@ class Memory:
         nodes = self.graph_store.query_nodes(scope=self.scope, layer="L0")
         turns = [n for n in nodes if getattr(n, "session_id", "") == session_id]
         turns.sort(key=lambda t: t.turn_index)
+
+        # Skip turns already linked to an L1 episode to avoid duplicate compression
+        uncompressed = []
+        for turn in turns:
+            neighbors = self.graph_store.get_neighbors(
+                turn.id, direction="in", edge_types=[EdgeType.DERIVED_FROM]
+            )
+            if not neighbors:
+                uncompressed.append(turn)
+        turns = uncompressed
+
         if len(turns) < 2:
             return
 
