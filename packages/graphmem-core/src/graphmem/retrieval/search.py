@@ -16,6 +16,8 @@ class SearchEngine:
         k: int = 8,
         scope: str | None = None,
         layers: tuple[Layer, ...] = (Layer.L1, Layer.L2),
+        expand_graph: bool = True,
+        max_expansion_nodes: int = 20,
     ) -> list[MemoryItem]:
         all_results = []
         for layer in layers:
@@ -30,6 +32,20 @@ class SearchEngine:
                     node.layer.value, 1.0
                 )
                 all_results.append(MemoryItem(node=node, score=score * layer_weight))
+
+        # Graph expansion: from each seed, walk outgoing edges and bring in neighbors
+        if expand_graph:
+            seeds = list(all_results)
+            expanded_ids = {item.node.id for item in all_results}
+            for seed in seeds:
+                for edge, neighbor in self.graph_store.get_neighbors(seed.node.id, direction="out"):
+                    if neighbor.id in expanded_ids:
+                        continue
+                    if len(expanded_ids) >= max_expansion_nodes + len(seeds):
+                        break
+                    expanded_ids.add(neighbor.id)
+                    base_score = next((r.score for r in all_results if r.node.id == seed.node.id), 0.5)
+                    all_results.append(MemoryItem(node=neighbor, score=base_score * 0.7))
 
         seen = {}
         for item in all_results:
