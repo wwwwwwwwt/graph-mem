@@ -106,6 +106,7 @@ def main():
     recall_parser.add_argument("--k", type=int, default=8)
     recall_parser.add_argument("--layer", default="L1,L2", help="Layers to search, e.g. L1,L2")
     recall_parser.add_argument("--json", action="store_true", help="Output JSON")
+    recall_parser.add_argument("--max-hops", type=int, default=2, help="Graph expansion depth (0-5)")
 
     graph_parser = subparsers.add_parser("graph", help="Show graph around a node")
     graph_parser.add_argument("node_id")
@@ -155,7 +156,7 @@ def main():
             print(nid)
         elif args.command == "recall":
             layers = _parse_layers(args.layer)
-            result = mem.recall(args.query, k=args.k, layers=layers)
+            result = mem.recall(args.query, k=args.k, layers=layers, max_hops=args.max_hops)
             if args.json:
                 print(
                     json.dumps(

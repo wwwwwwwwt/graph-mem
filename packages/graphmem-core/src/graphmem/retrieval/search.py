@@ -1,6 +1,6 @@
 """Vector search engine."""
 
-from graphmem.schema import Layer, MemoryItem
+from graphmem.schema import EdgeType, Layer, MemoryItem
 from graphmem.stores.base import GraphStore, VectorStore
 
 
@@ -18,6 +18,8 @@ class SearchEngine:
         layers: tuple[Layer, ...] = (Layer.L1, Layer.L2),
         expand_graph: bool = True,
         max_expansion_nodes: int = 20,
+        max_hops: int = 2,
+        edge_types: list[EdgeType] | None = None,
     ) -> list[MemoryItem]:
         all_results = []
         for layer in layers:
@@ -33,19 +35,34 @@ class SearchEngine:
                 )
                 all_results.append(MemoryItem(node=node, score=score * layer_weight))
 
-        # Graph expansion: from each seed, walk outgoing edges and bring in neighbors
+        # Graph expansion: bidirectional BFS up to max_hops
         if expand_graph:
-            seeds = list(all_results)
             expanded_ids = {item.node.id for item in all_results}
-            for seed in seeds:
-                for edge, neighbor in self.graph_store.get_neighbors(seed.node.id, direction="out"):
-                    if neighbor.id in expanded_ids:
-                        continue
-                    if len(expanded_ids) >= max_expansion_nodes + len(seeds):
-                        break
-                    expanded_ids.add(neighbor.id)
-                    base_score = next((r.score for r in all_results if r.node.id == seed.node.id), 0.5)
-                    all_results.append(MemoryItem(node=neighbor, score=base_score * 0.7))
+            hop_decay = {1: 0.7, 2: 0.5, 3: 0.35, 4: 0.25, 5: 0.18}
+
+            # frontier: list of (node_id, base_score_from_seed)
+            frontier = [(item.node.id, item.score) for item in all_results]
+            hop = 0
+            while frontier and hop < max_hops:
+                hop += 1
+                next_frontier = []
+                for node_id, base_score in frontier:
+                    # Bidirectional: both incoming and outgoing edges
+                    for direction in ("out", "in"):
+                        for edge, neighbor in self.graph_store.get_neighbors(
+                            node_id, direction=direction, edge_types=edge_types
+                        ):
+                            if neighbor.id in expanded_ids:
+                                continue
+                            if len(expanded_ids) >= max_expansion_nodes + len(all_results):
+                                break
+                            expanded_ids.add(neighbor.id)
+                            decay = hop_decay.get(hop, 0.18)
+                            all_results.append(
+                                MemoryItem(node=neighbor, score=base_score * decay)
+                            )
+                            next_frontier.append((neighbor.id, base_score * decay))
+                frontier = next_frontier
 
         seen = {}
         for item in all_results:

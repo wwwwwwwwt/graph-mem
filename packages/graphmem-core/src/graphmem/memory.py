@@ -285,6 +285,7 @@ class Memory:
         time_window: timedelta | None = None,
         edge_types: list[EdgeType] | None = None,
         explain: bool = False,
+        max_hops: int = 2,
     ) -> RecallResult:
         start = datetime.now(timezone.utc)
         effective_scope = self.scope if scope == "current" else scope
@@ -297,6 +298,8 @@ class Memory:
             k=k,
             scope=effective_scope,
             layers=layers,
+            max_hops=max_hops,
+            edge_types=edge_types or [EdgeType.MENTIONS, EdgeType.RELATES_TO],
         )
         formatted = format_results(items, token_budget=token_budget)
         latency = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
