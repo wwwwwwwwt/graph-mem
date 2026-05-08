@@ -226,18 +226,23 @@ class Memory:
 
         # Stage 2: Entity extraction (Mode B only)
         if not isinstance(self.llm_client, NoOpLLMClient):
-            extractor = EntityExtractor(self.llm_client)
-            entities = extractor.extract(episode)
+            existing_l2 = [
+                n for n in self.graph_store.query_nodes(scope=self.scope, layer="L2")
+            ]
+            extractor = EntityExtractor(self.llm_client, embed_client=self.embed_client)
+            entities = extractor.extract(episode, existing_entities=existing_l2)
             for entity in entities:
-                entity.id = f"L2-{ULID()}"
-                self.graph_store.create_node(entity)
-                self.vector_store.insert(
-                    embedding_id=f"emb-{entity.id}",
-                    node_id=entity.id,
-                    scope=self.scope,
-                    layer=Layer.L2.value,
-                    vector=self.embed_client.embed([entity.description or entity.name])[0],
-                )
+                is_new = not entity.id
+                if is_new:
+                    entity.id = f"L2-{ULID()}"
+                    self.graph_store.create_node(entity)
+                    self.vector_store.insert(
+                        embedding_id=f"emb-{entity.id}",
+                        node_id=entity.id,
+                        scope=self.scope,
+                        layer=Layer.L2.value,
+                        vector=self.embed_client.embed([entity.description or entity.name])[0],
+                    )
                 edge = MemoryEdge(
                     id=f"edge-{episode.id}-{entity.id}",
                     type=EdgeType.MENTIONS,
