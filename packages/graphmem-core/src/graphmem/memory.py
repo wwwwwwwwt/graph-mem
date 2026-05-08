@@ -300,6 +300,7 @@ class Memory:
             layers=layers,
             max_hops=max_hops,
             edge_types=edge_types or [EdgeType.MENTIONS, EdgeType.RELATES_TO],
+            time_window=time_window,
         )
         formatted = format_results(items, token_budget=token_budget)
         latency = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)

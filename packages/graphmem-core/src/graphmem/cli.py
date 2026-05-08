@@ -107,6 +107,7 @@ def main():
     recall_parser.add_argument("--layer", default="L1,L2", help="Layers to search, e.g. L1,L2")
     recall_parser.add_argument("--json", action="store_true", help="Output JSON")
     recall_parser.add_argument("--max-hops", type=int, default=2, help="Graph expansion depth (0-5)")
+    recall_parser.add_argument("--since-days", type=int, default=None, help="Only recall nodes newer than N days")
 
     graph_parser = subparsers.add_parser("graph", help="Show graph around a node")
     graph_parser.add_argument("node_id")
@@ -155,8 +156,10 @@ def main():
             nid = mem.write_turn(args.role, args.content, session_id=args.session_id)
             print(nid)
         elif args.command == "recall":
+            from datetime import timedelta
             layers = _parse_layers(args.layer)
-            result = mem.recall(args.query, k=args.k, layers=layers, max_hops=args.max_hops)
+            time_window = timedelta(days=args.since_days) if args.since_days else None
+            result = mem.recall(args.query, k=args.k, layers=layers, max_hops=args.max_hops, time_window=time_window)
             if args.json:
                 print(
                     json.dumps(

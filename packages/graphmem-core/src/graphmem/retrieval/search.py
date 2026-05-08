@@ -1,5 +1,8 @@
 """Vector search engine."""
 
+import math
+from datetime import datetime, timedelta, timezone
+
 from graphmem.schema import EdgeType, Layer, MemoryItem
 from graphmem.stores.base import GraphStore, VectorStore
 
@@ -20,7 +23,12 @@ class SearchEngine:
         max_expansion_nodes: int = 20,
         max_hops: int = 2,
         edge_types: list[EdgeType] | None = None,
+        time_window: timedelta | None = None,
+        halflife_days: float = 30.0,
     ) -> list[MemoryItem]:
+        now = datetime.now(timezone.utc)
+        cutoff = now - time_window if time_window else None
+
         all_results = []
         for layer in layers:
             hits = self.vector_store.search(
@@ -30,10 +38,20 @@ class SearchEngine:
                 node = self.graph_store.get_node(node_id)
                 if node is None:
                     continue
+                if cutoff and node.created_at and node.created_at < cutoff:
+                    continue
                 layer_weight = {"L0": 0.5, "L1": 1.0, "L2": 1.1, "L3": 1.2}.get(
                     node.layer.value, 1.0
                 )
-                all_results.append(MemoryItem(node=node, score=score * layer_weight))
+                node_created = node.created_at
+                if node_created and node_created.tzinfo is None:
+                    node_created = node_created.replace(tzinfo=timezone.utc)
+                age_seconds = max(0, (now - node_created).total_seconds()) if node_created else 0
+                age_days = age_seconds / 86400.0
+                time_decay = math.exp(-age_days / halflife_days)
+                all_results.append(
+                    MemoryItem(node=node, score=score * layer_weight * time_decay)
+                )
 
         # Graph expansion: bidirectional BFS up to max_hops
         if expand_graph:
