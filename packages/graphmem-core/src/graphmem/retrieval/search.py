@@ -3,14 +3,21 @@
 import math
 from datetime import datetime, timedelta, timezone
 
+from graphmem.retrieval.rerank import Reranker
 from graphmem.schema import EdgeType, Layer, MemoryItem
 from graphmem.stores.base import GraphStore, VectorStore
 
 
 class SearchEngine:
-    def __init__(self, vector_store: VectorStore, graph_store: GraphStore):
+    def __init__(
+        self,
+        vector_store: VectorStore,
+        graph_store: GraphStore,
+        reranker: Reranker | None = None,
+    ):
         self.vector_store = vector_store
         self.graph_store = graph_store
+        self.reranker = reranker
 
     def search(
         self,
@@ -25,14 +32,19 @@ class SearchEngine:
         edge_types: list[EdgeType] | None = None,
         time_window: timedelta | None = None,
         halflife_days: float = 30.0,
+        query: str | None = None,
+        top_k_multiplier: int = 4,
     ) -> list[MemoryItem]:
         now = datetime.now(timezone.utc)
         cutoff = now - time_window if time_window else None
 
+        # If re-ranking is enabled, fetch more candidates from vector store
+        vector_k = k * top_k_multiplier if (self.reranker and query) else k * 2
+
         all_results = []
         for layer in layers:
             hits = self.vector_store.search(
-                query_vector, k=k * 2, scope=scope, layer=layer.value
+                query_vector, k=vector_k, scope=scope, layer=layer.value
             )
             for node_id, score in hits:
                 node = self.graph_store.get_node(node_id)
@@ -88,4 +100,8 @@ class SearchEngine:
                 seen[item.node.id] = item
 
         ranked = sorted(seen.values(), key=lambda x: x.score, reverse=True)
+
+        if self.reranker and query:
+            return self.reranker.rerank(query, ranked, k=k)
+
         return ranked[:k]

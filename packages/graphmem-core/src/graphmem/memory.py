@@ -53,7 +53,13 @@ class Memory:
         self.llm_client = llm_client
         self.embed_client = embed_client
         self.queue = queue
-        self.search_engine = SearchEngine(vector_store, graph_store)
+        # Optional re-ranker
+        reranker = None
+        if getattr(config.retrieval, "rerank", None) and config.retrieval.rerank.enabled:
+            from graphmem.retrieval.rerank import Reranker
+            reranker = Reranker(model_name=config.retrieval.rerank.model)
+
+        self.search_engine = SearchEngine(vector_store, graph_store, reranker=reranker)
         if isinstance(self.llm_client, NoOpLLMClient):
             self.summarizer = HeuristicEpisodeSummarizer(
                 trigger_turns=config.compression.triggers.get("turns", 20),
@@ -301,8 +307,16 @@ class Memory:
             max_hops=max_hops,
             edge_types=edge_types or [EdgeType.MENTIONS, EdgeType.RELATES_TO],
             time_window=time_window,
+            query=query,
         )
         formatted = format_results(items, token_budget=token_budget)
+
+        # Scrub secrets if enabled
+        if getattr(self.config.retrieval, "scrub_secrets", True):
+            from graphmem.retrieval.scrubber import SecretScrubber
+            scrubber = SecretScrubber()
+            formatted = scrubber.scrub(formatted)
+
         latency = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
 
         return RecallResult(

@@ -22,6 +22,12 @@ class EmbedConfig(BaseModel):
     dim: int = 384
 
 
+class RerankConfig(BaseModel):
+    enabled: bool = False
+    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    top_k_multiplier: int = 4
+
+
 class RetrievalConfig(BaseModel):
     default_k: int = 8
     default_token_budget: int = 4000
@@ -42,6 +48,8 @@ class RetrievalConfig(BaseModel):
             "L3": 1.2,
         }
     )
+    rerank: RerankConfig = Field(default_factory=RerankConfig)
+    scrub_secrets: bool = True
 
 
 class CompressionConfig(BaseModel):
